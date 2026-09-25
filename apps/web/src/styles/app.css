@@ -1,0 +1,26 @@
+/* App-level additions on top of the CLASSES.OS design system (os.css). */
+body { margin: 0; }
+.os a { color: inherit; text-decoration: none; }
+.os .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.os .spacer { flex: 1; }
+.os .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.os .err { color: var(--hot); font-size: 12.5px; margin-top: 8px; }
+.os .muted { color: var(--txt2); font-size: 12.5px; }
+.os select.ip { appearance: none; }
+.os .page-head { display: flex; align-items: flex-end; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
+.os .page-head .sub { margin-bottom: 0; }
+.os .spin { width: 22px; height: 22px; border: 2.5px solid var(--line); border-top-color: var(--acc); border-radius: 50%; animation: spin .8s linear infinite; margin: 40px auto; }
+.os .auth-wrap { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
+.os .auth-card { width: min(420px, 100%); }
+.os .modal { position: fixed; inset: 0; z-index: 85; display: flex; justify-content: center; align-items: flex-start; padding-top: 10vh; }
+.os .modal .k { width: min(520px, 92vw); animation: pop .26s var(--spring) both; max-height: 80vh; overflow-y: auto; }
+.os .menu-btn { display: none; }
+
+@media (max-width: 860px) {
+  .os .sd { position: fixed; top: 46px; bottom: 0; left: 0; z-index: 70; transform: translateX(-100%); transition: transform .3s var(--ease); }
+  .os .sd.open { transform: none; box-shadow: var(--sh3); }
+  .os .mn { padding: 18px 16px 60px; }
+  .os .menu-btn { display: grid; }
+  .os .grid2 { grid-template-columns: 1fr; }
+  .os .kk { display: none; }
+}
