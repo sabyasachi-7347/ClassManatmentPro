@@ -117,6 +117,16 @@ then builds a release **APK**, an **App Bundle** and the **web** build. It runs 
   API URL or make a demo build
 - you push a tag like `app-v0.1.0`, which also creates a **GitHub Release** with the APK, AAB and web zip
 
+**Getting the APK**
+
+- **Latest build, direct link:** every push to the default branch replaces the `latest-apk`
+  pre-release, so the newest APK is always at
+  `https://github.com/sabyasachi-7347/ClassManatmentPro/releases/download/latest-apk/classes-os.apk`
+  (also listed under **Releases**).
+- **Any run (including PRs):** open the run under **Actions**, scroll to *Artifacts*, download
+  **classes-os-apk** (a zip holding the APK). The Play Store bundle is **classes-os-aab**.
+  Artifacts are kept 30 days.
+
 The build number is the workflow run number, so each new APK installs over the previous one.
 
 Optional settings (repo **Settings → Secrets and variables → Actions**):
