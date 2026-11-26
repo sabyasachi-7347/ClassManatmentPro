@@ -90,8 +90,9 @@ flutter run --dart-define=USE_EMULATORS=true --dart-define=EMULATOR_HOST=192.168
 4. Create accounts: the owner signs up on the web app and creates the institute, then invites
    teachers, parents and students. Each invite returns a set-password link.
 
-> Release builds are currently signed with the **debug key** (`android/app/build.gradle.kts`).
-> That's fine for sideloaded test builds. Add a real keystore before uploading to the Play Store.
+> Release builds are signed with the **debug key** unless `android/key.properties` exists (see
+> [CI builds](#ci-builds-github-actions)). That's fine for sideloaded test builds; add a real
+> keystore before uploading to the Play Store.
 
 ### Push notifications (absence alerts)
 
@@ -105,6 +106,35 @@ the API pushes to a student's parents when a teacher marks them absent and when 
 
 A parent without the app still gets an alert record. It shows as *Waiting*, then *Silent* after
 `ABSENCE_SILENT_HOURS` (default 3) on the staff screens, so someone can call.
+
+## CI builds (GitHub Actions)
+
+[`.github/workflows/flutter-app.yml`](../../.github/workflows/flutter-app.yml) runs analyze + tests,
+then builds a release **APK**, an **App Bundle** and the **web** build. It runs when:
+
+- a push to `main` or a pull request touches `apps/classes_os/` (artifacts on the run page, kept 30 days)
+- you start it by hand from **Actions → Flutter app build → Run workflow**, where you can set the
+  API URL or make a demo build
+- you push a tag like `app-v0.1.0`, which also creates a **GitHub Release** with the APK, AAB and web zip
+
+The build number is the workflow run number, so each new APK installs over the previous one.
+
+Optional settings (repo **Settings → Secrets and variables → Actions**):
+
+| Name | Kind | What it does |
+|---|---|---|
+| `API_URL` | variable | API URL baked into builds (`--dart-define=API_URL=…`) |
+| `FIREBASE_OPTIONS_DART` | secret | `base64 -w0 lib/firebase_options.dart`, if you don't commit that file |
+| `ANDROID_KEYSTORE_BASE64` | secret | `base64 -w0 upload-keystore.jks` |
+| `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD` | secrets | keystore credentials |
+
+Without the keystore secrets, release builds are debug-signed (fine for sideloading, not for the
+Play Store). Create a keystore with
+`keytool -genkey -v -keystore upload-keystore.jks -keyalg RSA -keysize 2048 -validity 10000 -alias upload`.
+Locally, the same signing works by creating `android/key.properties` (git-ignored) with
+`storeFile`, `storePassword`, `keyAlias`, `keyPassword`.
+
+Without Firebase config, CI builds start in demo mode.
 
 ## 3. Checks
 
