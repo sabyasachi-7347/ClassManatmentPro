@@ -124,7 +124,8 @@ then builds a release **APK**, an **App Bundle** and the **web** build. It runs 
   `https://github.com/sabyasachi-7347/ClassManatmentPro/releases/download/latest-apk/classes-os.apk`
   (also listed under **Releases**).
 - **Any run (including PRs):** open the run under **Actions**, scroll to *Artifacts*, download
-  **classes-os-apk** (a zip holding the APK). The Play Store bundle is **classes-os-aab**.
+  **classes-os-<run>.apk**. It downloads as the APK itself, not a zip. The Play Store bundle is
+  **classes-os-aab** (zipped).
   Artifacts are kept 30 days.
 
 The build number is the workflow run number, so each new APK installs over the previous one.
