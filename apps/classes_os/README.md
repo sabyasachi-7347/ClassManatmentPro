@@ -112,7 +112,7 @@ A parent without the app still gets an alert record. It shows as *Waiting*, then
 [`.github/workflows/flutter-app.yml`](../../.github/workflows/flutter-app.yml) runs analyze + tests,
 then builds a release **APK**, an **App Bundle** and the **web** build. It runs when:
 
-- a push to `main` or a pull request touches `apps/classes_os/` (artifacts on the run page, kept 30 days)
+- a push to the default branch (or `main`) or a pull request touches `apps/classes_os/` (artifacts on the run page, kept 30 days)
 - you start it by hand from **Actions → Flutter app build → Run workflow**, where you can set the
   API URL or make a demo build
 - you push a tag like `app-v0.1.0`, which also creates a **GitHub Release** with the APK, AAB and web zip
