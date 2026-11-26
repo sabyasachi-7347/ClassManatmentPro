@@ -6,7 +6,8 @@ Class / coaching-institute management platform.
 |---|---|---|
 | **API** | NestJS 11 · Firebase Admin SDK · Swagger | [`apps/api`](apps/api) |
 | **Web** (admin + teacher + parent portal) | React 19 · Vite · Firebase Auth | [`apps/web`](apps/web) |
-| **Mobile** (teachers, students, parents) | Flutter · Riverpod · go_router · Dio | [`apps/mobile`](apps/mobile) |
+| **App** (teachers, students, parents, owners) | Flutter · Firebase Auth · FCM · Dio | [`apps/classes_os`](apps/classes_os) |
+| Mobile (earlier scaffold, superseded by `apps/classes_os`) | Flutter · Riverpod · go_router | [`apps/mobile`](apps/mobile) |
 | **Database / Auth** | Cloud Firestore · Firebase Authentication | [`firebase`](firebase) |
 
 The web UI uses the CLASSES.OS v3 design system (bento dashboards, dark mode, "data as hero"
@@ -43,7 +44,9 @@ in [`apps/mobile/lib/core/theme.dart`](apps/mobile/lib/core/theme.dart).
 
 Institutes & onboarding · Team/invites & roles · Batches (schedule, teachers, monthly fee) ·
 Students · Enrollment matrix (drag-to-paint) · Attendance (per batch per day) ·
-Fees (monthly generation, payments, overdue) · Announcements · Role-aware dashboard.
+Fees (monthly generation, payments, overdue) · Announcements · Role-aware dashboard ·
+**Absence alerts** (raised on roll call → push to parents → parent acknowledges → staff nudge the silent) ·
+**Tests & marks** (ranks, leaderboard, per-student results) · **Syllabus coverage** (teachers log chapters).
 
 Swagger docs: `http://localhost:3000/docs` when the API is running.
 
@@ -65,8 +68,11 @@ npm run dev:api                 # http://localhost:3000/api/v1  · docs at /docs
 cp apps/web/.env.example apps/web/.env.local
 npm run dev:web                 # http://localhost:5173 — create an account, then your institute
 
-# 4. Mobile (new terminal)
-cd apps/mobile && flutter pub get
+# 4. Demo data (new terminal) — wipes the emulators, then seeds an institute
+npm run seed -w apps/api        # owner@/teacher@/parent@/student@demo.test, password secret123
+
+# 5. App
+cd apps/classes_os && flutter pub get
 flutter run --dart-define=USE_EMULATORS=true
 ```
 
@@ -74,9 +80,11 @@ flutter run --dart-define=USE_EMULATORS=true
 
 ```bash
 npm test                        # API unit tests
-npm run test:e2e -w apps/api    # 38-step API scenario against the emulators (wipes emulator data)
-cd apps/mobile && flutter analyze && flutter test
+npm run test:e2e -w apps/api    # full API scenario against the emulators (wipes emulator data)
+cd apps/classes_os && flutter analyze && flutter test
 ```
+
+Building the app for testers (APK / App Store): see [`apps/classes_os/README.md`](apps/classes_os/README.md).
 
 ## What's next
 

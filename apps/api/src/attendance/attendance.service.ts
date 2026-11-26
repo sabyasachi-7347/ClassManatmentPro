@@ -1,5 +1,6 @@
-import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { FieldValue } from 'firebase-admin/firestore';
+import { AbsencesService } from '../absences/absences.service';
 import { AuthUser, Role } from '../auth/auth.types';
 import { BatchesService } from '../batches/batches.service';
 import { ISO_DATE } from '../common/dates';
@@ -15,6 +16,7 @@ export class AttendanceService {
     private readonly firebase: FirebaseService,
     private readonly batches: BatchesService,
     private readonly students: StudentsService,
+    private readonly absences: AbsencesService,
   ) {}
 
   private col(iid: string) {
@@ -34,7 +36,11 @@ export class AttendanceService {
     const ids = Object.keys(records);
     const count = (s: AttendanceStatus) => ids.filter((id) => records[id] === s).length;
 
-    const ref = this.col(tenantOf(user)).doc(`${batchId}_${date}`);
+    const iid = tenantOf(user);
+    const batch = await this.firebase.db.collection(paths.batches(iid)).doc(batchId).get();
+    if (!batch.exists) throw new NotFoundException('Batch not found');
+
+    const ref = this.col(iid).doc(`${batchId}_${date}`);
     await ref.set({
       batchId,
       date,
@@ -51,7 +57,15 @@ export class AttendanceService {
       markedBy: user.uid,
       updatedAt: FieldValue.serverTimestamp(),
     });
-    return toDto(await ref.get());
+    const alerts = await this.absences.sync(
+      iid,
+      { id: batchId, name: batch.get('name') },
+      date,
+      records,
+      user.uid,
+      dto.topic,
+    );
+    return { ...toDto(await ref.get()), alerts };
   }
 
   async forBatch(user: AuthUser, batchId: string, q: AttendanceRangeQuery) {

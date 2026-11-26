@@ -23,6 +23,8 @@ export const paths = {
   attendance: (iid: string) => `institutes/${iid}/attendance`,
   fees: (iid: string) => `institutes/${iid}/fees`,
   announcements: (iid: string) => `institutes/${iid}/announcements`,
+  absences: (iid: string) => `institutes/${iid}/absences`,
+  tests: (iid: string) => `institutes/${iid}/tests`,
 };
 
 /**

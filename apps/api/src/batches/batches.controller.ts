@@ -3,7 +3,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { AuthUser, Role } from '../auth/auth.types';
 import { CurrentUser, Roles } from '../auth/decorators';
 import { tenantOf } from '../common/tenant';
-import { CreateBatchDto, UpdateBatchDto, UpdateEnrollmentsDto } from './batches.dto';
+import { CreateBatchDto, UpdateBatchDto, UpdateEnrollmentsDto, UpdateSyllabusDto } from './batches.dto';
 import { BatchesService } from './batches.service';
 
 @ApiTags('batches')
@@ -32,6 +32,13 @@ export class BatchesController {
   @Patch('batches/:id')
   update(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: UpdateBatchDto) {
     return this.svc.update(tenantOf(user), id, dto);
+  }
+
+  /** Teachers log coverage here; staff can also restructure the chapter list. */
+  @Roles(Role.Owner, Role.Admin, Role.Teacher)
+  @Put('batches/:id/syllabus')
+  syllabus(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: UpdateSyllabusDto) {
+    return this.svc.updateSyllabus(user, id, dto);
   }
 
   @Roles(Role.Owner, Role.Admin)

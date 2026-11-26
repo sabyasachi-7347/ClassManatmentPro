@@ -4,7 +4,7 @@ import { AuthUser, Role } from '../auth/auth.types';
 import { paths, plain, toDto } from '../common/firestore.util';
 import { tenantOf } from '../common/tenant';
 import { FirebaseService } from '../firebase/firebase.service';
-import { CreateBatchDto, UpdateBatchDto, UpdateEnrollmentsDto } from './batches.dto';
+import { CreateBatchDto, UpdateBatchDto, UpdateEnrollmentsDto, UpdateSyllabusDto } from './batches.dto';
 
 @Injectable()
 export class BatchesService {
@@ -76,6 +76,26 @@ export class BatchesService {
     const ref = this.col(iid).doc(id);
     if (!(await ref.get()).exists) throw new NotFoundException('Batch not found');
     await ref.update({ ...plain(dto), updatedAt: FieldValue.serverTimestamp() });
+    return toDto(await ref.get());
+  }
+
+  /**
+   * Replace the chapter list. Teachers may only change statuses, not add,
+   * remove or rename chapters — the curriculum belongs to the institute.
+   */
+  async updateSyllabus(user: AuthUser, id: string, dto: UpdateSyllabusDto) {
+    await this.assertCanAccess(user, id);
+    const ref = this.col(tenantOf(user)).doc(id);
+    const snap = await ref.get();
+    if (!snap.exists) throw new NotFoundException('Batch not found');
+    if (user.role === Role.Teacher) {
+      const current = ((snap.get('syllabus') as { title: string }[] | undefined) ?? []).map((c) => c.title);
+      const next = dto.chapters.map((c) => c.title);
+      if (current.length !== next.length || current.some((t, i) => t !== next[i])) {
+        throw new ForbiddenException('Teachers can update chapter status only');
+      }
+    }
+    await ref.update({ syllabus: plain(dto.chapters), updatedAt: FieldValue.serverTimestamp() });
     return toDto(await ref.get());
   }
 
