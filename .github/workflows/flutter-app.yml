@@ -1,0 +1,222 @@
+name: Flutter app build
+
+# Builds apps/classes_os: analyze + test, then a release APK, an Android App Bundle and the web build.
+#
+# Runs on pushes/PRs that touch the app, on version tags (app-v1.2.3 → GitHub Release with the APK),
+# and manually from the Actions tab ("Run workflow") where you can set the API URL or demo mode.
+#
+# Optional repository settings (Settings → Secrets and variables → Actions):
+#   Variables
+#     API_URL                    deployed NestJS API, e.g. https://api.example.com/api/v1
+#   Secrets
+#     FIREBASE_OPTIONS_DART      base64 of lib/firebase_options.dart from `flutterfire configure`
+#                                (skip if that file is committed)
+#     ANDROID_KEYSTORE_BASE64    base64 of the upload keystore (.jks)
+#     ANDROID_KEYSTORE_PASSWORD
+#     ANDROID_KEY_ALIAS
+#     ANDROID_KEY_PASSWORD
+# Without the keystore secrets, release builds are signed with a debug key (fine for sideloading,
+# not for the Play Store). Without Firebase config the app starts in demo mode.
+
+on:
+  push:
+    branches: [main]
+    tags: ['app-v*']
+    paths:
+      - 'apps/classes_os/**'
+      - '.github/workflows/flutter-app.yml'
+  pull_request:
+    paths:
+      - 'apps/classes_os/**'
+      - '.github/workflows/flutter-app.yml'
+  workflow_dispatch:
+    inputs:
+      api_url:
+        description: 'API URL baked into the build (blank = repository variable API_URL)'
+        required: false
+        default: ''
+      demo:
+        description: 'Demo build (mock data, role switcher, no Firebase)'
+        type: boolean
+        default: false
+
+concurrency:
+  group: flutter-app-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  FLUTTER_VERSION: '3.50.1'
+  APP_DIR: apps/classes_os
+
+jobs:
+  check:
+    name: Analyze & test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ env.APP_DIR }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - run: flutter pub get
+      - run: dart format --output=none --set-exit-if-changed lib test || echo "::warning::Some files are not dart-formatted"
+      - run: flutter analyze --no-fatal-infos
+      - run: flutter test
+
+  android:
+    name: Android (APK + AAB)
+    needs: check
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ env.APP_DIR }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('apps/classes_os/android/**/*.gradle*', 'apps/classes_os/android/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: gradle-${{ runner.os }}-
+
+      # The project asks Gradle for an 8 GB heap; hosted runners have less memory.
+      - name: Limit Gradle memory
+        run: |
+          mkdir -p ~/.gradle
+          echo "org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g" >> ~/.gradle/gradle.properties
+
+      - &build-config
+        name: Build configuration
+        id: cfg
+        shell: bash
+        env:
+          INPUT_API_URL: ${{ inputs.api_url }}
+          INPUT_DEMO: ${{ inputs.demo }}
+          VAR_API_URL: ${{ vars.API_URL }}
+          FIREBASE_OPTIONS_DART: ${{ secrets.FIREBASE_OPTIONS_DART }}
+        run: |
+          if [ -n "$FIREBASE_OPTIONS_DART" ]; then
+            echo "$FIREBASE_OPTIONS_DART" | base64 --decode > lib/firebase_options.dart
+            echo "Using Firebase options from secret"
+          fi
+          defines=""
+          api="${INPUT_API_URL:-$VAR_API_URL}"
+          [ -n "$api" ] && defines="$defines --dart-define=API_URL=$api"
+          [ "$INPUT_DEMO" = "true" ] && defines="$defines --dart-define=DEMO=true"
+          # Version name from pubspec, build number from the run, so every build installs over the last.
+          echo "defines=$defines" >> "$GITHUB_OUTPUT"
+          echo "build_number=${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+          echo "Dart defines:${defines:- (none)}"
+
+      - name: Release signing
+        shell: bash
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::warning::No ANDROID_KEYSTORE_BASE64 secret — release builds are signed with a debug key."
+            exit 0
+          fi
+          echo "$KEYSTORE_BASE64" | base64 --decode > android/app/upload-keystore.jks
+          cat > android/key.properties <<EOF
+          storeFile=upload-keystore.jks
+          storePassword=$KEYSTORE_PASSWORD
+          keyAlias=$KEY_ALIAS
+          keyPassword=$KEY_PASSWORD
+          EOF
+
+      - run: flutter pub get
+
+      - name: Build APK
+        run: flutter build apk --release --build-number=${{ steps.cfg.outputs.build_number }} ${{ steps.cfg.outputs.defines }}
+
+      - name: Build App Bundle
+        run: flutter build appbundle --release --build-number=${{ steps.cfg.outputs.build_number }} ${{ steps.cfg.outputs.defines }}
+
+      - name: Name outputs
+        run: |
+          mkdir -p dist
+          cp build/app/outputs/flutter-apk/app-release.apk dist/classes-os-${{ github.run_number }}.apk
+          cp build/app/outputs/bundle/release/app-release.aab dist/classes-os-${{ github.run_number }}.aab
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: classes-os-android
+          path: ${{ env.APP_DIR }}/dist/
+          retention-days: 30
+
+  web:
+    name: Web
+    needs: check
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ env.APP_DIR }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - *build-config
+
+      - run: flutter pub get
+      - run: flutter build web --release ${{ steps.cfg.outputs.defines }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: classes-os-web
+          path: ${{ env.APP_DIR }}/build/web/
+          retention-days: 30
+
+  release:
+    name: GitHub Release
+    if: startsWith(github.ref, 'refs/tags/app-v')
+    needs: [android, web]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Zip web build
+        run: cd artifacts/classes-os-web && zip -qr ../classes-os-web.zip .
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            artifacts/classes-os-android/*.apk
+            artifacts/classes-os-android/*.aab
+            artifacts/classes-os-web.zip
