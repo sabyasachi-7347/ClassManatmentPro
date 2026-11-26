@@ -206,9 +206,24 @@ Future<void> showQuickActions(BuildContext context, List<QuickAction> actions) {
 /// only the students who are missing, so a 34-strong batch is two taps rather
 /// than thirty-four. Saving fires the parent notifications.
 /// ---------------------------------------------------------------------------
-Future<void> showRollCall(BuildContext context, {required String batch}) {
-  final roster = Mock.students.take(6).toList();
-  final absent = <String>{};
+///
+/// Pass [roster] and [onSave] to run a real roll call: [initialAbsent]
+/// pre-fills a re-take, and [onSave] gets the absent ids and returns the toast
+/// to show (or throws, and the sheet stays open with the error).
+Future<void> showRollCall(
+  BuildContext context, {
+  required String batch,
+  List<Student>? roster,
+  Set<String> initialAbsent = const {},
+  Future<String> Function(Set<String> absent)? onSave,
+}) {
+  final rows = roster ?? Mock.students.take(6).toList();
+  final absent = <String>{...initialAbsent};
+  var saving = false;
+  String? error;
+  // The footer lives outside the body's StatefulBuilder; this tells it the
+  // absent count changed so the button label keeps up.
+  final changed = ValueNotifier(0);
 
   return showAppSheet<void>(
     context: context,
@@ -223,16 +238,20 @@ Future<void> showRollCall(BuildContext context, {required String batch}) {
               padding: const EdgeInsets.only(bottom: 16),
               child: Row(
                 children: [
-                  _tally(context, '${roster.length - absent.length}', 'Present', c.lime),
+                  _tally(context, '${rows.length - absent.length}', 'Present', c.lime),
                   const SizedBox(width: 12),
                   _tally(context, '${absent.length}', 'Absent',
                       absent.isEmpty ? c.text3 : c.hot),
                   const SizedBox(width: 12),
-                  _tally(context, '${roster.length}', 'Roster', c.text),
+                  _tally(context, '${rows.length}', 'Roster', c.text),
                 ],
               ),
             ),
-            for (final s in roster)
+            if (rows.isEmpty)
+              const EmptyState(
+                  title: 'No students in this batch',
+                  body: 'Enrol students on the Mapping screen first.'),
+            for (final s in rows)
               _RosterRow(
                 student: s,
                 absent: absent.contains(s.id),
@@ -241,6 +260,7 @@ Future<void> showRollCall(BuildContext context, {required String batch}) {
                   setSheetState(() {
                     absent.contains(s.id) ? absent.remove(s.id) : absent.add(s.id);
                   });
+                  changed.value++;
                 },
               ),
             const SizedBox(height: 8),
@@ -248,32 +268,67 @@ Future<void> showRollCall(BuildContext context, {required String batch}) {
         );
       },
     ),
-    footer: (sheetContext) => StatefulBuilder(
-      builder: (context, _) => Row(
+    footer: (sheetContext) => ValueListenableBuilder<int>(
+      valueListenable: changed,
+      builder: (context, _, __) => StatefulBuilder(
+      builder: (context, setFooter) => Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Expanded(
-            child: BigButton('Cancel', onPressed: () => Navigator.of(sheetContext).pop()),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: BigButton(
-              absent.isEmpty ? 'All present' : 'Save · alert ${absent.length}',
-              kind: BtnKind.primary,
-              onPressed: () {
-                Navigator.of(sheetContext).pop();
-                showToast(
-                  context,
-                  absent.isEmpty
-                      ? 'All present — saved'
-                      : '${absent.length} absent · parents notified',
-                );
-              },
+          if (error != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Text(error!, style: AppType.body(12.5, color: context.c.hot)),
             ),
+          Row(
+            children: [
+              Expanded(
+                child: BigButton('Cancel', onPressed: () => Navigator.of(sheetContext).pop()),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: BigButton(
+                  saving
+                      ? 'Saving…'
+                      : absent.isEmpty
+                          ? 'All present'
+                          : 'Save · alert ${absent.length}',
+                  kind: BtnKind.primary,
+                  onPressed: () async {
+                    if (saving || rows.isEmpty) return;
+                    if (onSave == null) {
+                      Navigator.of(sheetContext).pop();
+                      showToast(
+                        context,
+                        absent.isEmpty
+                            ? 'All present — saved'
+                            : '${absent.length} absent · parents notified',
+                      );
+                      return;
+                    }
+                    setFooter(() {
+                      saving = true;
+                      error = null;
+                    });
+                    try {
+                      final msg = await onSave({...absent});
+                      if (sheetContext.mounted) Navigator.of(sheetContext).pop();
+                      if (context.mounted) showToast(context, msg);
+                    } catch (e) {
+                      setFooter(() {
+                        saving = false;
+                        error = '$e';
+                      });
+                    }
+                  },
+                ),
+              ),
+            ],
           ),
         ],
       ),
+      ),
     ),
-  );
+  ).whenComplete(changed.dispose);
 }
 
 Widget _tally(BuildContext context, String value, String label, Color color) {

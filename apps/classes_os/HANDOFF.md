@@ -82,18 +82,19 @@ teacher marks absent  →  FCM push to parent  →  parent acknowledges
 stack — the single-flow architecture gives no free realtime, so push is
 required rather than optional.
 
-## When the API arrives
+## The API is connected
 
-1. Replace `mock_data.dart` with a repository that calls NestJS. Models already
-   match the shape the API should return; no widget knows where data comes from.
-2. Firebase Auth on the client, ID token verified by NestJS on every request.
-   Firestore rules can stay deny-all for clients since only the Admin SDK reads
-   and writes.
-3. Delete the role switcher from `_TopBar` in `app_shell.dart`. Replace it with
-   the membership picker already built in `entry_flow.dart` — a user holding one
-   membership skips it, a teacher-and-parent sees two cards.
-4. A user is **one identity with many memberships**, each a (role, institute)
-   pair. Role is not a field on the user. `Role` in `models.dart` assumes this.
+Live mode (`lib/live/`) signs in with Firebase Auth and reads everything from the NestJS API; the
+mock-data screens in `lib/features/` remain as demo mode and as the design reference. See
+`README.md` for how to run, test and build.
+
+- A user is **one identity with one membership** in the API today (`role` + `instituteId` custom
+  claims). The membership picker in `entry_flow.dart` is ready for when an account can hold several.
+- Owner and admin both open the classes-admin desk. Faculty, system admin and super admin have no
+  API role yet and stay demo-only.
+- The absence state machine is real: `absences/{batchId}_{date}_{studentId}` is opened when a roll
+  call marks someone absent, pushed to parents, acknowledged by a parent, and derived as *silent*
+  after `ABSENCE_SILENT_HOURS`. Re-saving a roll call never re-notifies.
 
 ## Still undecided
 

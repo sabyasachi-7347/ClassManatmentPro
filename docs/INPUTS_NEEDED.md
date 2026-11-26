@@ -12,7 +12,9 @@ needed to deploy, or to lock in product decisions I had to guess.
 | 3 | **Create Firestore** (Native mode) + pick a **region** (e.g. `asia-south1` for India) | Firebase console |
 | 4 | **Service account JSON** for the API (Project settings → Service accounts). Never commit it. | `GOOGLE_APPLICATION_CREDENTIALS` or `FIREBASE_CLIENT_EMAIL`/`FIREBASE_PRIVATE_KEY` |
 | 5 | **Web app config** (apiKey, authDomain, appId) | `apps/web/.env.local` |
-| 6 | **Android package name / iOS bundle ID** (currently `com.classesos.classes_os`) and then run `flutterfire configure` | `apps/mobile/lib/firebase_options.dart` (generated) |
+| 6 | **Android package name / iOS bundle ID** (currently `com.classesos.app`) and then run `flutterfire configure` in `apps/classes_os` | `apps/classes_os/lib/firebase_options.dart` (generated) |
+| 7 | **APNs key** for iOS push (Apple Developer → Keys), uploaded in Firebase → Cloud Messaging | Firebase console |
+| 8 | **Android release keystore** before Play Store upload (test APKs use the debug key) | `apps/classes_os/android` |
 
 ## 2. Hosting (needed to deploy)
 
@@ -42,8 +44,11 @@ I assumed these. Each is easy to change now and harder later.
 
 ## 4. Features not built yet (proposed next steps)
 
-- Tests/exams & marks → leaderboard (the prototype's `.lb` styles suggest this)
-- Push notifications (FCM) for announcements, absence alerts, fee reminders
+- ~~Tests/exams & marks → leaderboard~~ (done)
+- ~~Push notifications for absence alerts~~ (done); still to do for announcements and fee reminders
+- Leaderboards show other students as "Ishita R." (first name + initial). Confirm or choose anonymised ranks
+- Teacher availability / "can't take this lecture" and timetable publishing (designed in the app, no API yet)
+- Faculty, system-admin and super-admin roles (designed in the app, no API roles yet)
 - Homework / study material uploads (Firebase Storage)
 - Timetable view & holidays calendar
 - Reports: attendance and fee collection exports (CSV/PDF)

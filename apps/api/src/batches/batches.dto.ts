@@ -4,6 +4,7 @@ import {
   ArrayMaxSize,
   IsArray,
   IsBoolean,
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
@@ -22,6 +23,19 @@ export class ScheduleSlotDto {
   @ApiProperty({ example: '18:30' }) @Matches(HHMM) end: string;
 }
 
+export const CHAPTER_STATUSES = ['todo', 'current', 'done'] as const;
+
+export class SyllabusChapterDto {
+  @ApiProperty() @IsString() @Length(1, 120) title: string;
+  @ApiProperty({ enum: CHAPTER_STATUSES }) @IsIn(CHAPTER_STATUSES) status: (typeof CHAPTER_STATUSES)[number];
+}
+
+export class UpdateSyllabusDto {
+  @ApiProperty({ type: [SyllabusChapterDto] })
+  @IsArray() @ArrayMaxSize(200) @ValidateNested({ each: true }) @Type(() => SyllabusChapterDto)
+  chapters: SyllabusChapterDto[];
+}
+
 export class CreateBatchDto {
   @ApiProperty() @IsString() @Length(1, 80) name: string;
   @ApiProperty() @IsString() @Length(1, 80) subject: string;
@@ -35,6 +49,9 @@ export class CreateBatchDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() @Min(1) @Max(1000) capacity?: number;
   @ApiPropertyOptional({ description: 'Monthly fee for this batch' })
   @IsOptional() @IsInt() @Min(0) monthlyFee?: number;
+  @ApiPropertyOptional({ type: [SyllabusChapterDto] })
+  @IsOptional() @IsArray() @ArrayMaxSize(200) @ValidateNested({ each: true }) @Type(() => SyllabusChapterDto)
+  syllabus?: SyllabusChapterDto[];
 }
 
 export class UpdateBatchDto extends PartialType(CreateBatchDto) {

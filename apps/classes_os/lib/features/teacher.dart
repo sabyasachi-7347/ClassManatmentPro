@@ -114,7 +114,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
           builder: (context, logged, _) => Column(
             children: [
               for (var i = 0; i < Mock.today.length; i++)
-                _RailItem(
+                RailItem(
                   lecture: Mock.today[i],
                   last: i == Mock.today.length - 1,
                   logged: logged.contains(Mock.today[i].id),
@@ -288,20 +288,29 @@ Widget _timeRow(String time, String title, String sub, AppColors c, {bool cancel
     );
 
 /// One stop on the day rail: time, a dot on the spine, and the lecture card.
-class _RailItem extends StatelessWidget {
+class RailItem extends StatelessWidget {
   final Lecture lecture;
   final bool last;
   final bool logged;
-  final VoidCallback onRoll, onSyllabus, onLog, onCant;
+  final VoidCallback? onRoll, onSyllabus, onLog, onCant;
 
-  const _RailItem({
+  /// Replaces the built-in buttons when set (the live screens pass their own).
+  final List<Widget>? actions;
+
+  /// Replaces the present/roster pill on a finished lecture.
+  final Widget? badge;
+
+  const RailItem({
+    super.key,
     required this.lecture,
     required this.last,
-    required this.logged,
-    required this.onRoll,
-    required this.onSyllabus,
-    required this.onLog,
-    required this.onCant,
+    this.logged = false,
+    this.onRoll,
+    this.onSyllabus,
+    this.onLog,
+    this.onCant,
+    this.actions,
+    this.badge,
   });
 
   @override
@@ -311,7 +320,7 @@ class _RailItem extends StatelessWidget {
     final live = l.state == LectureState.live;
     final done = l.state == LectureState.done;
 
-    final actions = <Widget>[
+    final actions = this.actions ?? <Widget>[
       if (live) ...[
         AppButton('Take roll call', kind: BtnKind.primary, small: true, onPressed: onRoll),
         AppButton('Syllabus', small: true, onPressed: onSyllabus),
@@ -383,8 +392,12 @@ class _RailItem extends StatelessWidget {
                                 style: AppType.mono(11, color: c.text2)),
                           ]),
                         ),
-                        if (live) const Pill('Live', tone: PillTone.hot),
-                        if (done) Pill('${l.present}/${l.roster}', tone: PillTone.lime),
+                        if (badge != null)
+                          badge!
+                        else ...[
+                          if (live) const Pill('Live', tone: PillTone.hot),
+                          if (done) Pill('${l.present}/${l.roster}', tone: PillTone.lime),
+                        ],
                       ],
                     ),
                     if (actions.isNotEmpty) ...[

@@ -11,6 +11,8 @@ import '../features/student.dart';
 import '../features/super_admin.dart';
 import '../features/system_admin.dart';
 import '../features/teacher.dart';
+import '../live/live_screens.dart';
+import '../live/live_store.dart';
 import '../widgets/primitives.dart';
 import '../widgets/sheets.dart';
 import 'command_palette.dart';
@@ -26,15 +28,29 @@ class AppShell extends StatefulWidget {
   final bool isDark;
   final VoidCallback onToggleTheme;
 
-  const AppShell({super.key, required this.isDark, required this.onToggleTheme});
+  /// Set when signed in for real: the shell shows only this role, reads from
+  /// the API via [LiveScope], and swaps the role switcher for sign-out.
+  final Role? liveRole;
+  final Future<void> Function()? onSignOut;
+
+  const AppShell({
+    super.key,
+    required this.isDark,
+    required this.onToggleTheme,
+    this.liveRole,
+    this.onSignOut,
+  });
 
   @override
   State<AppShell> createState() => _AppShellState();
 }
 
 class _AppShellState extends State<AppShell> {
-  Role _role = Role.classesAdmin;
-  String _tab = 'overview';
+  late Role _role = widget.liveRole ?? Role.classesAdmin;
+  late String _tab = kRoles[_role]!.firstTab;
+
+  bool get _live => widget.liveRole != null;
+  LiveStore? get _store => _live ? LiveScope.of(context) : null;
   bool _forcePhone = false;
   bool _loading = false;
   int _child = 0; // which child a parent is looking at
@@ -88,6 +104,16 @@ class _AppShellState extends State<AppShell> {
     if (_loading && _role != Role.guest) {
       return const Padding(padding: EdgeInsets.only(top: 4), child: SkeletonGrid());
     }
+    final store = _store;
+    if (store != null) {
+      return LiveScreen(
+        role: _role,
+        tab: _tab,
+        onJump: _setTab,
+        childIndex: _child,
+        onChildChanged: (i) => setState(() => _child = i),
+      );
+    }
     return switch (_role) {
       Role.guest => const EntryFlow(),
       Role.superAdmin => SuperAdminScreen(tab: _tab),
@@ -104,7 +130,7 @@ class _AppShellState extends State<AppShell> {
     };
   }
 
-  List<QuickAction> get _quickActions => switch (_role) {
+  List<QuickAction> get _quickActions => _live ? const [] : switch (_role) {
         Role.teacher => [
             QuickAction(
                 glyph: '✓',
@@ -191,13 +217,15 @@ class _AppShellState extends State<AppShell> {
             children: [
               _TopBar(
                 role: _role,
+                live: _live,
+                onSignOut: widget.onSignOut,
                 isDark: widget.isDark,
                 showDeviceToggle: _cfg.role.isDesk && wide,
                 forcePhone: _forcePhone,
                 onRole: _setRole,
                 onToggleTheme: widget.onToggleTheme,
                 onDevice: (phone) => setState(() => _forcePhone = phone),
-                onPalette: wide ? _openPalette : null,
+                onPalette: wide && !_live ? _openPalette : null,
               ),
               Expanded(
                 child: asDesk ? _desk() : _phone(wide),
@@ -232,7 +260,7 @@ class _AppShellState extends State<AppShell> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(_cfg.scope,
+                    Text(_store?.me.instituteName ?? _cfg.scope,
                         style: AppType.display(17,
                             weight: FontWeight.w700, color: c.text)),
                     const SizedBox(height: 3),
@@ -333,7 +361,7 @@ class _AppShellState extends State<AppShell> {
 
   Widget _phoneBody() {
     final c = context.c;
-    final header = _cfg.header;
+    final header = _store != null ? liveHeader(_store!, _role, _child) : _cfg.header;
     final hasNav = _cfg.tabs.isNotEmpty;
     final quick = _quickActions;
 
@@ -373,6 +401,12 @@ class _AppShellState extends State<AppShell> {
                   color: c.accent,
                   backgroundColor: c.surface,
                   onRefresh: () async {
+                    final store = _store;
+                    if (store != null) {
+                      await store.load(quiet: true);
+                      if (mounted && store.error != null) showToast(context, store.error!);
+                      return;
+                    }
                     await Future<void>.delayed(const Duration(milliseconds: 700));
                     if (mounted) showToast(context, 'Refreshed');
                   },
@@ -420,9 +454,13 @@ class _TopBar extends StatelessWidget {
   final VoidCallback onToggleTheme;
   final ValueChanged<bool> onDevice;
   final VoidCallback? onPalette;
+  final bool live;
+  final Future<void> Function()? onSignOut;
 
   const _TopBar({
     required this.role,
+    this.live = false,
+    this.onSignOut,
     required this.isDark,
     required this.showDeviceToggle,
     required this.forcePhone,
@@ -431,6 +469,21 @@ class _TopBar extends StatelessWidget {
     required this.onDevice,
     this.onPalette,
   });
+
+  Future<void> _confirmSignOut(BuildContext context) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Sign out?'),
+        content: const Text('You will stop getting alerts on this device until you sign in again.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Sign out')),
+        ],
+      ),
+    );
+    if (ok == true) await onSignOut?.call();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -459,17 +512,21 @@ class _TopBar extends StatelessWidget {
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  for (final r in kRoleOrder) ...[
-                    _roleChip(context, r),
-                    const SizedBox(width: 3),
-                  ],
-                ],
-              ),
-            ),
+            child: live
+                ? Text(role.label,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppType.body(12, weight: FontWeight.w600, color: Colors.white70))
+                : SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        for (final r in kRoleOrder) ...[
+                          _roleChip(context, r),
+                          const SizedBox(width: 3),
+                        ],
+                      ],
+                    ),
+                  ),
           ),
           if (onPalette != null) ...[
             const SizedBox(width: 8),
@@ -497,6 +554,22 @@ class _TopBar extends StatelessWidget {
           ],
           const SizedBox(width: 10),
           _iconButton(context, isDark ? '☀' : '☾', onToggleTheme),
+          if (live && onSignOut != null) ...[
+            const SizedBox(width: 8),
+            InkWell(
+              onTap: () => _confirmSignOut(context),
+              borderRadius: BorderRadius.circular(9),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.09),
+                  borderRadius: BorderRadius.circular(9),
+                ),
+                child: Text('Sign out',
+                    style: AppType.body(11.5, weight: FontWeight.w600, color: Colors.white)),
+              ),
+            ),
+          ],
           if (showDeviceToggle) ...[
             const SizedBox(width: 8),
             Container(

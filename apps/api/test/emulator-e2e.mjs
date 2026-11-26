@@ -94,6 +94,52 @@ await call(teacher, 'POST', '/announcements', { title: 'Physics test', body: 'Fr
 await call(owner, 'POST', '/announcements', { title: 'Bio only', body: '...', batchIds: [b2.id] });
 const pan = await call(parent, 'GET', '/announcements');
 ok(pan.b.length === 2 && !pan.b.some((a) => a.title === 'Bio only'), 'parent sees institute + own batch announcements');
+// ---- Absence alerts: mark absent -> parent acknowledges -> staff see it ----
+const ab = await call(teacher, 'GET', `/absences?date=${today}`);
+ok(ab.s === 200 && ab.b.length === 1 && ab.b[0].studentId === s2.id && ab.b[0].state === 'waiting', `absence opened for absent student (${ab.s} ${JSON.stringify(ab.b).slice(0,160)})`);
+ok(mk.b.alerts?.opened === 1, 'mark reports opened alerts');
+const remark = await call(teacher, 'PUT', `/attendance/batches/${b1.id}/${today}`, { records: [{ studentId: s1.id, status: 'absent' }, { studentId: s2.id, status: 'absent' }], topic: 'Torque' });
+ok(remark.b.alerts.opened === 1, 're-marking only opens new alerts');
+ok((await call(owner, 'GET', `/absences?date=${today}`)).b.length === 2, 'owner sees all alerts for the day');
+ok((await call(parent, 'POST', '/me/devices', { token: 'test-device-token' })).s === 201, 'parent registers device');
+const pab = await call(parent, 'GET', '/absences');
+ok(pab.s === 200 && pab.b.length === 1 && pab.b[0].studentId === s1.id, `parent sees only own child's absence (${pab.s} ${JSON.stringify(pab.b).slice(0,120)})`);
+ok((await call(teacher, 'POST', `/absences/${pab.b[0].id}/ack`)).s === 403, 'teacher cannot acknowledge');
+const others = (await call(owner, 'GET', `/absences?date=${today}`)).b.find((a) => a.studentId === s2.id);
+ok((await call(parent, 'POST', `/absences/${others.id}/ack`)).s === 403, "parent cannot acknowledge another child's absence");
+const ack = await call(parent, 'POST', `/absences/${pab.b[0].id}/ack`);
+ok(ack.s === 201 && ack.b.state === 'acknowledged' && ack.b.ackAt, 'parent acknowledges');
+const nud = await call(teacher, 'POST', '/absences/nudge', { date: today });
+ok(nud.s === 201 && nud.b.nudged === 1, `nudge targets only unacknowledged (${JSON.stringify(nud.b)})`);
+const fixed = await call(teacher, 'PUT', `/attendance/batches/${b1.id}/${today}`, { records: [{ studentId: s1.id, status: 'absent' }, { studentId: s2.id, status: 'present' }] });
+ok(fixed.b.alerts.closed === 1, 'marking present closes the alert');
+const after = (await call(owner, 'GET', `/absences?date=${today}`)).b;
+ok(after.length === 1 && after[0].state === 'acknowledged', 'acknowledgement survives a re-mark');
+ok((await call(owner, 'GET', `/absences?state=waiting&date=${today}`)).b.length === 0, 'filter by state');
+
+// ---- Tests & marks ----
+const t1 = await call(teacher, 'POST', '/tests', { batchId: b1.id, title: 'Weekly Test 1', maxMarks: 80, date: today });
+ok(t1.s === 201 && t1.b.id, 'teacher creates test for own batch');
+ok((await call(teacher, 'POST', '/tests', { batchId: b2.id, title: 'x', maxMarks: 10, date: today })).s === 403, 'teacher cannot create test for other batch');
+ok((await call(teacher, 'PUT', `/tests/${t1.b.id}/marks`, { marks: [{ studentId: s1.id, score: 90 }] })).s === 400, 'score above max rejected');
+const em = await call(teacher, 'PUT', `/tests/${t1.b.id}/marks`, { marks: [{ studentId: s1.id, score: 68, note: 'Good' }, { studentId: s2.id, score: 74 }] });
+ok(em.s === 200 && em.b.rows[0].studentId === s2.id && em.b.rows[0].rank === 1 && em.b.average === 71, `marks entered and ranked (${JSON.stringify(em.b).slice(0,200)})`);
+const plb = await call(parent, 'GET', `/tests/${t1.b.id}`);
+const other = plb.b.rows.find((r) => !r.isMine);
+ok(plb.s === 200 && other.name === 'Diya R.' && other.studentId === undefined && other.note === undefined, 'parent leaderboard hides other students');
+const pres = await call(parent, 'GET', `/students/${s1.id}/results`);
+ok(pres.s === 200 && pres.b[0].score === 68 && pres.b[0].rank === 2 && pres.b[0].outOf === 2 && pres.b[0].note === 'Good', `parent sees child results (${JSON.stringify(pres.b).slice(0,160)})`);
+ok((await call(parent, 'GET', `/students/${s2.id}/results`)).s === 403, "parent blocked from other student's results");
+ok((await call(parent, 'GET', '/tests')).b.length === 1, 'parent lists tests of child batches');
+ok((await call(parent, 'POST', '/tests', { batchId: b1.id, title: 'x', maxMarks: 10, date: today })).s === 403, 'parent cannot create tests');
+
+// ---- Syllabus ----
+const syl = await call(owner, 'PATCH', `/batches/${b1.id}`, { syllabus: [{ title: 'Kinematics', status: 'done' }, { title: 'Rotation', status: 'current' }, { title: 'Gravitation', status: 'todo' }] });
+ok(syl.s === 200 && syl.b.syllabus.length === 3, 'owner sets syllabus');
+const ts1 = await call(teacher, 'PUT', `/batches/${b1.id}/syllabus`, { chapters: [{ title: 'Kinematics', status: 'done' }, { title: 'Rotation', status: 'done' }, { title: 'Gravitation', status: 'current' }] });
+ok(ts1.s === 200 && ts1.b.syllabus[1].status === 'done', 'teacher logs coverage');
+ok((await call(teacher, 'PUT', `/batches/${b1.id}/syllabus`, { chapters: [{ title: 'Renamed', status: 'done' }] })).s === 403, 'teacher cannot restructure syllabus');
+
 const mem = await call(owner, 'GET', '/members');
 ok(mem.b.length === 3, `members list (${mem.s} ${JSON.stringify(mem.b).slice(0,150)})`);
 ok((await call(owner, 'GET', '/members?role=teacher')).b.length === 1, 'members filter by role');

@@ -320,7 +320,7 @@ class StudentScreen extends StatelessWidget {
 enum _Ch { done, now, todo }
 
 /// A leaderboard row. Shared with the faculty desk.
-Widget leaderRow(BuildContext context, LeaderboardRow l, {bool showMeAsYou = false}) {
+Widget leaderRow(BuildContext context, LeaderboardRow l, {bool showMeAsYou = false, String meLabel = 'You'}) {
   final c = context.c;
   final me = showMeAsYou && l.isMe;
   return Container(
@@ -341,7 +341,7 @@ Widget leaderRow(BuildContext context, LeaderboardRow l, {bool showMeAsYou = fal
         const SizedBox(width: 10),
       ],
       Expanded(
-        child: Text(me ? 'You' : l.name,
+        child: Text(me ? meLabel : l.name,
             style: AppType.body(13, weight: me ? FontWeight.w700 : FontWeight.w500, color: me ? c.accent : c.text)),
       ),
       Text('${l.score}',
